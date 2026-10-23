@@ -1,0 +1,959 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบบันทึกและรายงานข้อมูลบัณฑิตศึกษา</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Sarabun', sans-serif; background-color: #f3f4f6; }
+        .hidden { display: none !important; }
+        /* Custom scrollbar for better appearance */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
+    </style>
+</head>
+<body class="text-gray-800 h-screen flex flex-col overflow-hidden">
+
+    <!-- Toast Notification System -->
+    <div id="toast-container" class="fixed top-4 right-4 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+    <!-- Modal System -->
+    <div id="modal-backdrop" class="fixed inset-0 bg-black bg-opacity-50 z-40 hidden flex items-center justify-center">
+        <div class="bg-white rounded-lg p-6 max-w-md w-full shadow-xl transform transition-all">
+            <h3 id="modal-title" class="text-lg font-bold mb-4">Confirm</h3>
+            <p id="modal-message" class="mb-6 text-gray-600">Are you sure?</p>
+            <div id="modal-prompt-container" class="hidden mb-6">
+                <input type="text" id="modal-prompt-input" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+            </div>
+            <div class="flex justify-end gap-3">
+                <button id="modal-btn-cancel" class="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300">ยกเลิก</button>
+                <button id="modal-btn-confirm" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">ยืนยัน</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- VIEW: LOGIN -->
+    <div id="view-login" class="flex-1 flex items-center justify-center bg-gray-100 h-full w-full absolute inset-0 z-30">
+        <div class="bg-white p-8 rounded-xl shadow-lg max-w-md w-full">
+            <div class="text-center mb-8">
+                <h1 class="text-2xl font-bold text-blue-700">ระบบบัณฑิตศึกษา</h1>
+                <p class="text-gray-500 text-sm mt-2">Graduate Student Record System</p>
+            </div>
+
+            <!-- Login Tabs -->
+            <div class="flex mb-6 border-b">
+                <button onclick="switchLoginTab('staff')" id="tab-staff" class="flex-1 pb-2 border-b-2 border-blue-600 text-blue-600 font-semibold">เจ้าหน้าที่</button>
+                <button onclick="switchLoginTab('advisor')" id="tab-advisor" class="flex-1 pb-2 border-b-2 border-transparent text-gray-500 font-semibold hover:text-blue-500">อาจารย์</button>
+                <button onclick="switchLoginTab('guest')" id="tab-guest" class="flex-1 pb-2 border-b-2 border-transparent text-gray-500 font-semibold hover:text-blue-500">ผู้เข้าชม</button>
+            </div>
+
+            <!-- Staff Login -->
+            <div id="login-staff-form" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">รหัสผ่าน (Staff)</label>
+                    <input type="password" id="staff-password" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" placeholder="ใส่รหัสผ่าน (admin)">
+                </div>
+                <button onclick="login('staff')" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700">เข้าสู่ระบบ (เจ้าหน้าที่)</button>
+            </div>
+
+            <!-- Advisor Login -->
+            <div id="login-advisor-form" class="space-y-4 hidden">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">เลือกชื่ออาจารย์</label>
+                    <select id="login-advisor-select" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                        <!-- Options populated by JS -->
+                    </select>
+                </div>
+                <button onclick="login('advisor')" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700">เข้าสู่ระบบ (อาจารย์ที่ปรึกษา)</button>
+            </div>
+
+            <!-- Guest Login -->
+            <div id="login-guest-form" class="space-y-4 hidden text-center">
+                <p class="text-sm text-gray-600 mb-4">ผู้เข้าชมสามารถดูได้เฉพาะหน้าแดชบอร์ดสรุปข้อมูล</p>
+                <button onclick="login('guest')" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gray-600 hover:bg-gray-700">เข้าสู่ระบบ (ผู้เข้าชม)</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MAIN APP LAYOUT (Sidebar + Content) -->
+    <div id="app-layout" class="hidden flex h-full w-full">
+        <!-- Sidebar -->
+        <aside class="w-64 bg-slate-800 text-white flex flex-col transition-all duration-300 flex-shrink-0" id="sidebar">
+            <div class="p-4 border-b border-slate-700 flex items-center justify-between">
+                <h2 class="text-lg font-bold truncate">ระบบบัณฑิตศึกษา</h2>
+            </div>
+            
+            <div class="p-4 text-sm text-slate-400 border-b border-slate-700">
+                สถานะ: <span id="user-role-display" class="font-semibold text-white"></span>
+                <br>
+                <span id="user-name-display" class="text-xs text-blue-300"></span>
+            </div>
+
+            <nav class="flex-1 p-4 space-y-2 overflow-y-auto" id="nav-menu">
+                <a href="#" onclick="showPage('dashboard')" class="nav-item block px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700" data-target="dashboard">แดชบอร์ด</a>
+                <a href="#" onclick="showPage('view-students')" id="nav-view-students" class="nav-item block px-4 py-2 rounded text-slate-300 hover:bg-slate-700 hover:text-white" data-target="view-students">รายชื่อนิสิตทั้งหมด</a>
+                <a href="#" onclick="showPage('add-student')" id="nav-add-student" class="nav-item block px-4 py-2 rounded text-slate-300 hover:bg-slate-700 hover:text-white" data-target="add-student">เพิ่ม/แก้ไข ข้อมูลนิสิต</a>
+                <a href="#" onclick="showPage('manage-advisors')" id="nav-manage-advisors" class="nav-item block px-4 py-2 rounded text-slate-300 hover:bg-slate-700 hover:text-white" data-target="manage-advisors">จัดการรายชื่ออาจารย์</a>
+                <a href="#" onclick="showPage('backup')" id="nav-backup" class="nav-item block px-4 py-2 rounded text-slate-300 hover:bg-slate-700 hover:text-white" data-target="backup">ส่งออก / แบ็คอัพข้อมูล</a>
+            </nav>
+            <div class="p-4 border-t border-slate-700">
+                <button onclick="logout()" class="w-full px-4 py-2 bg-red-600 rounded text-white hover:bg-red-700 text-sm font-medium">ออกจากระบบ</button>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="flex-1 flex flex-col overflow-hidden bg-gray-50">
+            <!-- Header -->
+            <header class="bg-white shadow-sm p-4 flex items-center justify-between">
+                <h2 id="page-title" class="text-xl font-semibold text-gray-800">แดชบอร์ด</h2>
+                <div class="md:hidden">
+                    <button onclick="toggleSidebar()" class="text-gray-500 hover:text-gray-700 focus:outline-none">
+                        <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+                    </button>
+                </div>
+            </header>
+
+            <!-- Scrollable Content -->
+            <div class="flex-1 overflow-auto p-4 md:p-6" id="main-content">
+                
+                <!-- PAGE: DASHBOARD -->
+                <div id="page-dashboard" class="page-section">
+                    <div class="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <p class="text-gray-600">ข้อมูลสรุปจำนวนนิสิตบัณฑิตศึกษา</p>
+                        <div class="flex items-center gap-2">
+                            <label class="text-sm font-medium text-gray-700">กรองตามสถานภาพ:</label>
+                            <select id="dash-filter-status" onchange="renderDashboard()" class="border-gray-300 rounded-md shadow-sm py-1 px-3 bg-white focus:ring-blue-500 focus:border-blue-500">
+                                <option value="all">ทั้งหมด</option>
+                                <option value="ปัจจุบัน">ปัจจุบัน</option>
+                                <option value="จบการศึกษา">จบการศึกษา</option>
+                                <option value="พ้นสภาพ">พ้นสภาพ</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Stats Grid -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                        <div class="bg-white rounded-lg shadow p-6 border-l-4 border-blue-500">
+                            <h3 class="text-gray-500 text-sm font-medium">นิสิตทั้งหมด</h3>
+                            <p class="text-3xl font-bold text-gray-800 mt-2" id="stat-total">0</p>
+                        </div>
+                        <div class="bg-white rounded-lg shadow p-6 border-l-4 border-indigo-500">
+                            <h3 class="text-gray-500 text-sm font-medium">ปริญญาโท</h3>
+                            <p class="text-3xl font-bold text-gray-800 mt-2" id="stat-master">0</p>
+                        </div>
+                        <div class="bg-white rounded-lg shadow p-6 border-l-4 border-purple-500">
+                            <h3 class="text-gray-500 text-sm font-medium">ปริญญาเอก</h3>
+                            <p class="text-3xl font-bold text-gray-800 mt-2" id="stat-phd">0</p>
+                        </div>
+                        <div class="bg-white rounded-lg shadow p-6 border-l-4 border-pink-500">
+                            <h3 class="text-gray-500 text-sm font-medium">แยกตามเพศ</h3>
+                            <div class="mt-2 text-sm text-gray-700 flex justify-between">
+                                <span>ชาย: <span class="font-bold text-lg" id="stat-male">0</span></span>
+                                <span>หญิง: <span class="font-bold text-lg" id="stat-female">0</span></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- PAGE: VIEW STUDENTS -->
+                <div id="page-view-students" class="page-section hidden flex-col h-full">
+                    <div class="mb-4 flex flex-col md:flex-row justify-between gap-4">
+                        <div class="relative w-full md:w-96">
+                            <input type="text" id="search-student" oninput="renderStudentTable()" placeholder="ค้นหา ชื่อ, นามสกุล หรือ รหัสนิสิต..." class="w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <div class="absolute left-3 top-2.5 text-gray-400">
+                                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                            </div>
+                        </div>
+                        <button id="btn-add-new" onclick="showPage('add-student')" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 hidden">
+                            + เพิ่มนิสิตใหม่
+                        </button>
+                    </div>
+
+                    <div class="bg-white rounded-lg shadow flex-1 overflow-hidden flex flex-col">
+                        <div class="overflow-x-auto flex-1">
+                            <table class="min-w-full divide-y divide-gray-200">
+                                <thead class="bg-gray-50 sticky top-0">
+                                    <tr>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">รหัสนิสิต</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ชื่อ-สกุล</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ระดับ</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">สถานภาพ</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">อ.ที่ปรึกษาหลัก</th>
+                                        <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">จัดการ</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="student-table-body" class="bg-white divide-y divide-gray-200">
+                                    <!-- Rows populated by JS -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- PAGE: ADD/EDIT STUDENT (Staff Only) -->
+                <div id="page-add-student" class="page-section hidden">
+                    <form id="student-form" onsubmit="handleStudentSubmit(event)" class="bg-white rounded-lg shadow p-6">
+                        <input type="hidden" id="form-id">
+                        
+                        <!-- Section 1: ข้อมูลทั่วไปการศึกษา -->
+                        <h3 class="text-lg font-semibold text-blue-700 border-b pb-2 mb-4">ส่วนที่ 1: ข้อมูลการศึกษา</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                            <div><label class="block text-sm text-gray-700">ลำดับ</label><input type="text" id="f_seq" class="mt-1 block w-full rounded-md border-gray-300 border p-2 text-sm"></div>
+                            <div>
+                                <label class="block text-sm text-gray-700 required">ระดับการศึกษา <span class="text-red-500">*</span></label>
+                                <select id="f_degree" required class="mt-1 block w-full rounded-md border-gray-300 border p-2 text-sm">
+                                    <option value="ปริญญาโท">ปริญญาโท</option>
+                                    <option value="ปริญญาเอก">ปริญญาเอก</option>
+                                </select>
+                            </div>
+                            <div><label class="block text-sm text-gray-700">ปฏิทินการศึกษา</label><input type="text" id="f_academic_calendar" class="mt-1 block w-full rounded-md border-gray-300 border p-2 text-sm"></div>
+                            <div><label class="block text-sm text-gray-700">ปีที่เข้าศึกษา</label><input type="text" id="f_entry_year" class="mt-1 block w-full rounded-md border-gray-300 border p-2 text-sm"></div>
+                            <div><label class="block text-sm text-gray-700">สถานภาพการศึกษา <span class="text-red-500">*</span></label>
+                                <select id="f_student_status" required class="mt-1 block w-full rounded-md border-gray-300 border p-2 text-sm">
+                                    <option value="ปัจจุบัน">ปัจจุบัน</option>
+                                    <option value="จบการศึกษา">จบการศึกษา</option>
+                                    <option value="พ้นสภาพ">พ้นสภาพ</option>
+                                </select>
+                            </div>
+                            <div><label class="block text-sm text-gray-700">แผนการเรียน</label><input type="text" id="f_study_plan" class="mt-1 block w-full rounded-md border-gray-300 border p-2 text-sm"></div>
+                            
+                            <div><label class="block text-sm text-gray-700">Double Masters Degree</label>
+                                <select id="f_double_master" class="mt-1 block w-full rounded-md border-gray-300 border p-2 text-sm">
+                                    <option value="ไม่เข้าร่วม">ไม่เข้าร่วม</option>
+                                    <option value="เข้าร่วม">เข้าร่วม</option>
+                                </select>
+                            </div>
+                            <div><label class="block text-sm text-gray-700">โครงการเรียนล่วงหน้า/ตรี+1</label>
+                                <select id="f_pre_bachelor" class="mt-1 block w-full rounded-md border-gray-300 border p-2 text-sm">
+                                    <option value="ไม่เข้าร่วม">ไม่เข้าร่วม</option>
+                                    <option value="เข้าร่วม">เข้าร่วม</option>
+                                </select>
+                            </div>
+                            <div><label class="block text-sm text-gray-700">ทุน</label><input type="text" id="f_scholarship" class="mt-1 block w-full rounded-md border-gray-300 border p-2 text-sm"></div>
+                            <div><label class="block text-sm text-gray-700">ระยะเวลาที่ได้รับทุน</label><input type="text" id="f_scholarship_duration" class="mt-1 block w-full rounded-md border-gray-300 border p-2 text-sm"></div>
+                            <div><label class="block text-sm text-gray-700">เงื่อนไขการเข้าศึกษา</label><input type="text" id="f_admission_condition" class="mt-1 block w-full rounded-md border-gray-300 border p-2 text-sm"></div>
+                            <div><label class="block text-sm text-gray-700">สถานะในการยื่นเอกสาร</label><input type="text" id="f_document_status" class="mt-1 block w-full rounded-md border-gray-300 border p-2 text-sm"></div>
+                        </div>
+
+                        <!-- Section 2: ข้อมูลส่วนตัว -->
+                        <h3 class="text-lg font-semibold text-blue-700 border-b pb-2 mb-4 mt-8">ส่วนที่ 2: ข้อมูลส่วนบุคคลและการติดต่อ</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                            <div><label class="block text-sm text-gray-700">รหัสนิสิต <span class="text-red-500">*</span></label><input type="text" id="f_student_id" required class="mt-1 block w-full rounded-md border-gray-300 border p-2 text-sm"></div>
+                            <div><label class="block text-sm text-gray-700">เพศ <span class="text-red-500">*</span></label>
+                                <select id="f_gender" required class="mt-1 block w-full rounded-md border-gray-300 border p-2 text-sm">
+                                    <option value="ชาย">ชาย</option>
+                                    <option value="หญิง">หญิง</option>
+                                </select>
+                            </div>
+                            <div><label class="block text-sm text-gray-700">คำนำหน้า</label><input type="text" id="f_prefix" class="mt-1 block w-full rounded-md border-gray-300 border p-2 text-sm"></div>
+                            <div><label class="block text-sm text-gray-700">ชื่อ <span class="text-red-500">*</span></label><input type="text" id="f_firstname" required class="mt-1 block w-full rounded-md border-gray-300 border p-2 text-sm"></div>
+                            <div><label class="block text-sm text-gray-700">นามสกุล <span class="text-red-500">*</span></label><input type="text" id="f_lastname" required class="mt-1 block w-full rounded-md border-gray-300 border p-2 text-sm"></div>
+                            
+                            <div><label class="block text-sm text-gray-700">เบอร์โทรศัพท์</label><input type="text" id="f_phone" class="mt-1 block w-full rounded-md border-gray-300 border p-2 text-sm"></div>
+                            <div><label class="block text-sm text-gray-700">อีเมล</label><input type="email" id="f_email" class="mt-1 block w-full rounded-md border-gray-300 border p-2 text-sm"></div>
+                            <div><label class="block text-sm text-gray-700">สถานที่ทำงาน</label><input type="text" id="f_workplace" class="mt-1 block w-full rounded-md border-gray-300 border p-2 text-sm"></div>
+                        </div>
+
+                        <!-- Section 3: ประวัติการศึกษา -->
+                        <h3 class="text-lg font-semibold text-blue-700 border-b pb-2 mb-4 mt-8">ส่วนที่ 3: ประวัติการศึกษาเดิม</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                            <div><label class="block text-sm text-gray-700">สถาบันที่จบ ป.ตรี</label><input type="text" id="f_bachelor_uni" class="mt-1 block w-full rounded-md border-gray-300 border p-2 text-sm"></div>
+                            <div><label class="block text-sm text-gray-700">สาขาที่จบ ป.ตรี</label><input type="text" id="f_bachelor_major" class="mt-1 block w-full rounded-md border-gray-300 border p-2 text-sm"></div>
+                            <div><label class="block text-sm text-gray-700">ปีที่จบ ป.ตรี</label><input type="text" id="f_bachelor_year" class="mt-1 block w-full rounded-md border-gray-300 border p-2 text-sm"></div>
+                            <div><label class="block text-sm text-gray-700">เกรดเฉลี่ย ป.ตรี</label><input type="text" id="f_bachelor_gpa" class="mt-1 block w-full rounded-md border-gray-300 border p-2 text-sm"></div>
+                            
+                            <div><label class="block text-sm text-gray-700">สถาบันที่จบ ป.โท</label><input type="text" id="f_master_uni" class="mt-1 block w-full rounded-md border-gray-300 border p-2 text-sm"></div>
+                            <div><label class="block text-sm text-gray-700">สาขาที่จบ ป.โท</label><input type="text" id="f_master_major" class="mt-1 block w-full rounded-md border-gray-300 border p-2 text-sm"></div>
+                            <div><label class="block text-sm text-gray-700">ปีที่จบ ป.โท</label><input type="text" id="f_master_year" class="mt-1 block w-full rounded-md border-gray-300 border p-2 text-sm"></div>
+                            <div><label class="block text-sm text-gray-700">ปีที่จบ ป.เอก</label><input type="text" id="f_phd_year" class="mt-1 block w-full rounded-md border-gray-300 border p-2 text-sm"></div>
+                        </div>
+
+                        <!-- Section 4: อาจารย์ที่ปรึกษาและผลงาน -->
+                        <h3 class="text-lg font-semibold text-blue-700 border-b pb-2 mb-4 mt-8">ส่วนที่ 4: อาจารย์ที่ปรึกษาและงานวิจัย</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                            <div>
+                                <label class="block text-sm text-gray-700">อ.ที่ปรึกษาหลัก (Advisor) <span class="text-red-500">*</span></label>
+                                <select id="f_advisor_main" required class="mt-1 block w-full rounded-md border-gray-300 border p-2 text-sm advisor-select-list">
+                                    <option value="">-- เลือก --</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm text-gray-700">อ.ที่ปรึกษาร่วม 1 (Co-Advisor 1)</label>
+                                <select id="f_advisor_co1" class="mt-1 block w-full rounded-md border-gray-300 border p-2 text-sm advisor-select-list">
+                                    <option value="">-- ไม่ระบุ --</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm text-gray-700">อ.ที่ปรึกษาร่วม 2 (Co-Advisor 2)</label>
+                                <select id="f_advisor_co2" class="mt-1 block w-full rounded-md border-gray-300 border p-2 text-sm advisor-select-list">
+                                    <option value="">-- ไม่ระบุ --</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm text-gray-700">อ.ที่ปรึกษาร่วม 3 (Co-Advisor 3)</label>
+                                <select id="f_advisor_co3" class="mt-1 block w-full rounded-md border-gray-300 border p-2 text-sm advisor-select-list">
+                                    <option value="">-- ไม่ระบุ --</option>
+                                </select>
+                            </div>
+                            
+                            <div class="md:col-span-2"><label class="block text-sm text-gray-700">หัวข้อวิทยานิพนธ์หลัก</label><textarea id="f_thesis_topic" rows="2" class="mt-1 block w-full rounded-md border-gray-300 border p-2 text-sm"></textarea></div>
+                            <div class="md:col-span-2"><label class="block text-sm text-gray-700">ผลงานวิจัยระหว่างเรียน</label><textarea id="f_research_during_study" rows="2" class="mt-1 block w-full rounded-md border-gray-300 border p-2 text-sm"></textarea></div>
+                            <div class="md:col-span-2"><label class="block text-sm text-gray-700">ผลงานวิจัยที่ใช้จบ</label><textarea id="f_research_for_graduation" rows="2" class="mt-1 block w-full rounded-md border-gray-300 border p-2 text-sm"></textarea></div>
+                        </div>
+
+                        <!-- Section 5: อื่นๆ -->
+                        <h3 class="text-lg font-semibold text-blue-700 border-b pb-2 mb-4 mt-8">ส่วนที่ 5: อื่นๆ</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                            <div><label class="block text-sm text-gray-700">เรียนต่อ</label><input type="text" id="f_continue_study" class="mt-1 block w-full rounded-md border-gray-300 border p-2 text-sm"></div>
+                            <div><label class="block text-sm text-gray-700">อื่นๆ</label><input type="text" id="f_other" class="mt-1 block w-full rounded-md border-gray-300 border p-2 text-sm"></div>
+                            <div class="md:col-span-2"><label class="block text-sm text-gray-700">หมายเหตุ</label><textarea id="f_remark" rows="2" class="mt-1 block w-full rounded-md border-gray-300 border p-2 text-sm"></textarea></div>
+                        </div>
+
+                        <div class="flex justify-end gap-4 mt-8 pt-4 border-t">
+                            <button type="button" onclick="showPage('view-students')" class="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300">ยกเลิก</button>
+                            <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium">บันทึกข้อมูล</button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- PAGE: MANAGE ADVISORS (Staff Only) -->
+                <div id="page-manage-advisors" class="page-section hidden max-w-3xl mx-auto">
+                    <div class="bg-white rounded-lg shadow p-6 mb-6">
+                        <h3 class="text-lg font-semibold mb-4 text-gray-800">เพิ่มอาจารย์ที่ปรึกษา</h3>
+                        <div class="flex gap-2">
+                            <input type="text" id="new-advisor-name" placeholder="ชื่อ-นามสกุล อาจารย์" class="flex-1 rounded-md border-gray-300 border p-2 focus:ring-blue-500 focus:border-blue-500">
+                            <button onclick="addAdvisor()" class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700">เพิ่ม</button>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-white rounded-lg shadow overflow-hidden">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">รายชื่ออาจารย์ที่ปรึกษา</th>
+                                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase w-32">จัดการ</th>
+                                </tr>
+                            </thead>
+                            <tbody id="advisors-table-body" class="bg-white divide-y divide-gray-200">
+                                <!-- Rows -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- PAGE: BACKUP & EXPORT (Staff Only) -->
+                <div id="page-backup" class="page-section hidden max-w-4xl mx-auto">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        
+                        <div class="bg-white rounded-lg shadow p-6 text-center border-t-4 border-green-500">
+                            <div class="text-green-500 mb-4">
+                                <svg class="w-12 h-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                            </div>
+                            <h3 class="text-lg font-bold mb-2">เทมเพลต CSV</h3>
+                            <p class="text-sm text-gray-500 mb-4">ดาวน์โหลดโครงสร้างไฟล์ CSV สำหรับดูรูปแบบข้อมูล</p>
+                            <button onclick="downloadCSVTemplate()" class="w-full px-4 py-2 bg-green-100 text-green-700 rounded hover:bg-green-200">ดาวน์โหลด Template</button>
+                        </div>
+
+                        <div class="bg-white rounded-lg shadow p-6 text-center border-t-4 border-blue-500">
+                            <div class="text-blue-500 mb-4">
+                                <svg class="w-12 h-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                            </div>
+                            <h3 class="text-lg font-bold mb-2">ส่งออกเป็น CSV</h3>
+                            <p class="text-sm text-gray-500 mb-4">นำข้อมูลนิสิตทั้งหมดออกเป็นไฟล์ CSV (เปิดใน Excel ได้)</p>
+                            <button onclick="exportCSV()" class="w-full px-4 py-2 bg-blue-100 text-blue-700 rounded hover:bg-blue-200">Export CSV</button>
+                        </div>
+
+                        <div class="bg-white rounded-lg shadow p-6 text-center border-t-4 border-purple-500">
+                            <div class="text-purple-500 mb-4">
+                                <svg class="w-12 h-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path></svg>
+                            </div>
+                            <h3 class="text-lg font-bold mb-2">แบ็คอัพเป็น JSON</h3>
+                            <p class="text-sm text-gray-500 mb-4">ส่งออกข้อมูลดิบในรูปแบบ JSON สำหรับโปรแกรมเมอร์</p>
+                            <button onclick="exportJSON()" class="w-full px-4 py-2 bg-purple-100 text-purple-700 rounded hover:bg-purple-200">Export JSON</button>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </main>
+    </div>
+
+    <!-- JavaScript Application Logic -->
+    <script>
+        // --- 1. STATE & DATA INITIALIZATION ---
+        const STAFF_PASSWORD = 'admin';
+        
+        let currentUser = null; // { role: 'staff'|'guest'|'advisor', name: string|null }
+        let advisors = [];
+        let students = [];
+
+        // Define form fields for easier mapping
+        const formFields = [
+            'seq', 'degree', 'academic_calendar', 'entry_year', 'double_master', 
+            'pre_bachelor', 'scholarship', 'scholarship_duration', 'student_id', 
+            'prefix', 'firstname', 'lastname', 'gender', 'document_status', 
+            'student_status', 'workplace', 'continue_study', 'other', 'study_plan', 
+            'phone', 'email', 'bachelor_uni', 'bachelor_major', 'bachelor_year', 
+            'bachelor_gpa', 'master_uni', 'master_major', 'master_year', 'phd_year', 
+            'admission_condition', 'remark', 'advisor_main', 'advisor_co1', 
+            'advisor_co2', 'advisor_co3', 'thesis_topic', 'research_during_study', 
+            'research_for_graduation'
+        ];
+
+        function initData() {
+            // Initialize Advisors
+            const storedAdvisors = localStorage.getItem('gsrs_advisors');
+            if (storedAdvisors) {
+                advisors = JSON.parse(storedAdvisors);
+            } else {
+                advisors = [
+                    { id: generateId(), name: 'ศ.ดร. สมชาย ใจดี' },
+                    { id: generateId(), name: 'รศ.ดร. สมศรี รักเรียน' },
+                    { id: generateId(), name: 'ผศ.ดร. มานะ ขยัน' }
+                ];
+                saveAdvisors();
+            }
+
+            // Initialize Students
+            const storedStudents = localStorage.getItem('gsrs_students');
+            if (storedStudents) {
+                students = JSON.parse(storedStudents);
+            } else {
+                students = [
+                    {
+                        id: generateId(), student_id: '6610001', prefix: 'นาย', firstname: 'กอไก่', lastname: 'ใจสู้',
+                        gender: 'ชาย', degree: 'ปริญญาโท', student_status: 'ปัจจุบัน', advisor_main: advisors[0].name
+                    },
+                    {
+                        id: generateId(), student_id: '6520002', prefix: 'นางสาว', firstname: 'ขอไข่', lastname: 'ใฝ่รู้',
+                        gender: 'หญิง', degree: 'ปริญญาเอก', student_status: 'จบการศึกษา', advisor_main: advisors[1].name
+                    }
+                ];
+                saveStudents();
+            }
+        }
+
+        function saveAdvisors() { localStorage.setItem('gsrs_advisors', JSON.stringify(advisors)); }
+        function saveStudents() { localStorage.setItem('gsrs_students', JSON.stringify(students)); }
+        function generateId() { return Date.now().toString(36) + Math.random().toString(36).substr(2); }
+
+        // --- 2. UI UTILITIES (Toast, Modal, Sidebar) ---
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            const color = type === 'success' ? 'bg-green-500' : 'bg-red-500';
+            toast.className = `${color} text-white px-6 py-3 rounded shadow-lg transform transition-all duration-300 translate-y-[-100%] opacity-0`;
+            toast.innerText = message;
+            container.appendChild(toast);
+            
+            // Animate in
+            setTimeout(() => {
+                toast.classList.remove('translate-y-[-100%]', 'opacity-0');
+            }, 10);
+
+            // Remove after 3s
+            setTimeout(() => {
+                toast.classList.add('translate-y-[-100%]', 'opacity-0');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        let modalResolve = null;
+        let isPromptMode = false;
+
+        function showConfirmModal(title, message) {
+            return new Promise((resolve) => {
+                isPromptMode = false;
+                document.getElementById('modal-title').innerText = title;
+                document.getElementById('modal-message').innerText = message;
+                document.getElementById('modal-message').classList.remove('hidden');
+                document.getElementById('modal-prompt-container').classList.add('hidden');
+                document.getElementById('modal-backdrop').classList.remove('hidden');
+                modalResolve = resolve;
+            });
+        }
+
+        function showPromptModal(title, defaultValue = '') {
+            return new Promise((resolve) => {
+                isPromptMode = true;
+                document.getElementById('modal-title').innerText = title;
+                document.getElementById('modal-message').classList.add('hidden');
+                document.getElementById('modal-prompt-container').classList.remove('hidden');
+                const input = document.getElementById('modal-prompt-input');
+                input.value = defaultValue;
+                document.getElementById('modal-backdrop').classList.remove('hidden');
+                input.focus();
+                modalResolve = resolve;
+            });
+        }
+        
+        document.getElementById('modal-btn-cancel').addEventListener('click', () => {
+            document.getElementById('modal-backdrop').classList.add('hidden');
+            if (modalResolve) modalResolve(isPromptMode ? null : false);
+        });
+        
+        document.getElementById('modal-btn-confirm').addEventListener('click', () => {
+            document.getElementById('modal-backdrop').classList.add('hidden');
+            if (modalResolve) {
+                if (isPromptMode) {
+                    modalResolve(document.getElementById('modal-prompt-input').value);
+                } else {
+                    modalResolve(true);
+                }
+            }
+        });
+
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            if (sidebar.classList.contains('-ml-64')) {
+                sidebar.classList.remove('-ml-64');
+            } else {
+                sidebar.classList.add('-ml-64');
+            }
+        }
+        // Responsive sidebar initial state
+        if (window.innerWidth < 768) { document.getElementById('sidebar').classList.add('-ml-64'); }
+
+        // --- 3. AUTHENTICATION & ROUTING ---
+        function switchLoginTab(tab) {
+            ['staff', 'advisor', 'guest'].forEach(t => {
+                document.getElementById(`login-${t}-form`).classList.add('hidden');
+                document.getElementById(`tab-${t}`).classList.replace('border-blue-600', 'border-transparent');
+                document.getElementById(`tab-${t}`).classList.replace('text-blue-600', 'text-gray-500');
+            });
+            document.getElementById(`login-${tab}-form`).classList.remove('hidden');
+            document.getElementById(`tab-${tab}`).classList.replace('border-transparent', 'border-blue-600');
+            document.getElementById(`tab-${tab}`).classList.replace('text-gray-500', 'text-blue-600');
+
+            if (tab === 'advisor') populateAdvisorLoginSelect();
+        }
+
+        function populateAdvisorLoginSelect() {
+            const select = document.getElementById('login-advisor-select');
+            select.innerHTML = advisors.map(a => `<option value="${a.name}">${a.name}</option>`).join('');
+        }
+
+        function login(role) {
+            if (role === 'staff') {
+                const pass = document.getElementById('staff-password').value;
+                if (pass !== STAFF_PASSWORD) return showToast('รหัสผ่านไม่ถูกต้อง', 'error');
+                currentUser = { role: 'staff', name: 'เจ้าหน้าที่' };
+            } else if (role === 'advisor') {
+                const advName = document.getElementById('login-advisor-select').value;
+                if (!advName) return showToast('กรุณาเลือกชื่ออาจารย์', 'error');
+                currentUser = { role: 'advisor', name: advName };
+            } else {
+                currentUser = { role: 'guest', name: 'ผู้เข้าชม' };
+            }
+
+            setupAppEnvironment();
+        }
+
+        function logout() {
+            currentUser = null;
+            document.getElementById('view-login').classList.remove('hidden');
+            document.getElementById('app-layout').classList.add('hidden');
+            // Clear passwords
+            document.getElementById('staff-password').value = '';
+        }
+
+        function setupAppEnvironment() {
+            document.getElementById('view-login').classList.add('hidden');
+            document.getElementById('app-layout').classList.remove('hidden');
+            
+            // Set User Info in Sidebar
+            const roleMap = { 'staff': 'เจ้าหน้าที่', 'advisor': 'อาจารย์ที่ปรึกษา', 'guest': 'ผู้เข้าชม' };
+            document.getElementById('user-role-display').innerText = roleMap[currentUser.role];
+            document.getElementById('user-name-display').innerText = currentUser.name || '';
+
+            // Setup Menu Permissions
+            document.getElementById('nav-add-student').style.display = (currentUser.role === 'staff') ? 'block' : 'none';
+            document.getElementById('nav-manage-advisors').style.display = (currentUser.role === 'staff') ? 'block' : 'none';
+            document.getElementById('nav-backup').style.display = (currentUser.role === 'staff') ? 'block' : 'none';
+            
+            document.getElementById('nav-view-students').style.display = (currentUser.role === 'guest') ? 'none' : 'block';
+            document.getElementById('btn-add-new').style.display = (currentUser.role === 'staff') ? 'block' : 'none';
+
+            // Populate all advisor dropdowns in the app
+            populateAdvisorDropdowns();
+
+            // Default route
+            showPage('dashboard');
+        }
+
+        function showPage(pageId) {
+            // Hide all pages
+            document.querySelectorAll('.page-section').forEach(el => el.classList.add('hidden'));
+            
+            // Remove active class from nav
+            document.querySelectorAll('.nav-item').forEach(el => {
+                el.classList.remove('bg-blue-600', 'text-white');
+                el.classList.add('text-slate-300');
+            });
+
+            // Show target page
+            document.getElementById(`page-${pageId}`).classList.remove('hidden');
+            document.getElementById(`page-${pageId}`).classList.add(pageId === 'view-students' ? 'flex' : 'block');
+            
+            // Set active nav
+            const activeNav = document.querySelector(`.nav-item[data-target="${pageId}"]`);
+            if(activeNav) {
+                activeNav.classList.add('bg-blue-600', 'text-white');
+                activeNav.classList.remove('text-slate-300');
+            }
+
+            // Close sidebar on mobile after clicking
+            if (window.innerWidth < 768) {
+                document.getElementById('sidebar').classList.add('-ml-64');
+            }
+
+            // Page specific executions
+            const titleMap = {
+                'dashboard': 'แดชบอร์ดสรุปข้อมูล',
+                'view-students': 'รายชื่อนิสิต',
+                'add-student': 'ฟอร์มข้อมูลนิสิต',
+                'manage-advisors': 'จัดการอาจารย์ที่ปรึกษา',
+                'backup': 'ระบบจัดการไฟล์ (Export)'
+            };
+            document.getElementById('page-title').innerText = titleMap[pageId] || '';
+
+            if (pageId === 'dashboard') renderDashboard();
+            if (pageId === 'view-students') renderStudentTable();
+            if (pageId === 'manage-advisors') renderAdvisors();
+            if (pageId === 'add-student') {
+                if(!document.getElementById('form-id').value) document.getElementById('student-form').reset();
+            }
+        }
+
+        // --- 4. DASHBOARD ---
+        function renderDashboard() {
+            const statusFilter = document.getElementById('dash-filter-status').value;
+            
+            // Filter students based on role and status
+            let filtered = students;
+            
+            // Filter by status dropdown
+            if (statusFilter !== 'all') {
+                filtered = filtered.filter(s => s.student_status === statusFilter);
+            }
+
+            // Calculate Stats
+            const total = filtered.length;
+            const master = filtered.filter(s => s.degree === 'ปริญญาโท').length;
+            const phd = filtered.filter(s => s.degree === 'ปริญญาเอก').length;
+            const male = filtered.filter(s => s.gender === 'ชาย').length;
+            const female = filtered.filter(s => s.gender === 'หญิง').length;
+
+            // Animate numbers
+            animateValue("stat-total", parseInt(document.getElementById("stat-total").innerText) || 0, total, 500);
+            animateValue("stat-master", parseInt(document.getElementById("stat-master").innerText) || 0, master, 500);
+            animateValue("stat-phd", parseInt(document.getElementById("stat-phd").innerText) || 0, phd, 500);
+            document.getElementById('stat-male').innerText = male;
+            document.getElementById('stat-female').innerText = female;
+        }
+
+        function animateValue(id, start, end, duration) {
+            if (start === end) {
+                document.getElementById(id).innerHTML = end;
+                return;
+            }
+            let range = end - start;
+            let current = start;
+            let increment = end > start ? 1 : -1;
+            let stepTime = Math.abs(Math.floor(duration / range));
+            let obj = document.getElementById(id);
+            let timer = setInterval(function() {
+                current += increment;
+                obj.innerHTML = current;
+                if (current == end) {
+                    clearInterval(timer);
+                }
+            }, stepTime);
+        }
+
+        // --- 5. VIEW STUDENTS ---
+        function renderStudentTable() {
+            const tbody = document.getElementById('student-table-body');
+            const search = document.getElementById('search-student').value.toLowerCase();
+            
+            tbody.innerHTML = '';
+
+            // Filter logic
+            let viewableStudents = students;
+            if (currentUser.role === 'advisor') {
+                // Advisor sees only students where they are MAIN advisor
+                viewableStudents = students.filter(s => s.advisor_main === currentUser.name);
+            }
+
+            if (search) {
+                viewableStudents = viewableStudents.filter(s => 
+                    (s.student_id && s.student_id.toLowerCase().includes(search)) ||
+                    (s.firstname && s.firstname.toLowerCase().includes(search)) ||
+                    (s.lastname && s.lastname.toLowerCase().includes(search))
+                );
+            }
+
+            if (viewableStudents.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="6" class="px-6 py-4 text-center text-gray-500">ไม่พบข้อมูลนิสิต</td></tr>`;
+                return;
+            }
+
+            viewableStudents.forEach(s => {
+                const statusColor = s.student_status === 'ปัจจุบัน' ? 'bg-green-100 text-green-800' : 
+                                  (s.student_status === 'จบการศึกษา' ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800');
+                
+                let actions = '';
+                if (currentUser.role === 'staff') {
+                    actions = `
+                        <button onclick="editStudent('${s.id}')" class="text-blue-600 hover:text-blue-900 mr-2">แก้ไข</button>
+                        <button onclick="deleteStudent('${s.id}')" class="text-red-600 hover:text-red-900">ลบ</button>
+                    `;
+                } else {
+                     actions = `<button onclick="viewStudentDetail('${s.id}')" class="text-gray-600 hover:text-gray-900">ดูข้อมูล</button>`;
+                }
+
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${s.student_id || '-'}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${s.prefix || ''}${s.firstname || ''} ${s.lastname || ''}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${s.degree || '-'}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusColor}">${s.student_status || '-'}</span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${s.advisor_main || '-'}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium text-center">${actions}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // --- 6. STUDENT FORM (Add/Edit) ---
+        function handleStudentSubmit(e) {
+            e.preventDefault();
+            if (currentUser.role !== 'staff') return;
+
+            const id = document.getElementById('form-id').value;
+            let studentData = { id: id || generateId() };
+
+            // Collect all form fields
+            formFields.forEach(field => {
+                const el = document.getElementById(`f_${field}`);
+                if (el) studentData[field] = el.value.trim();
+            });
+
+            if (id) {
+                // Update
+                const index = students.findIndex(s => s.id === id);
+                if (index !== -1) students[index] = studentData;
+                showToast('อัปเดตข้อมูลสำเร็จ');
+            } else {
+                // Create
+                students.push(studentData);
+                showToast('เพิ่มข้อมูลสำเร็จ');
+            }
+
+            saveStudents();
+            document.getElementById('student-form').reset();
+            document.getElementById('form-id').value = '';
+            showPage('view-students');
+        }
+
+        function editStudent(id) {
+            const s = students.find(x => x.id === id);
+            if (!s) return;
+            
+            document.getElementById('form-id').value = s.id;
+            formFields.forEach(field => {
+                const el = document.getElementById(`f_${field}`);
+                if (el && s[field] !== undefined) el.value = s[field];
+            });
+            showPage('add-student');
+            document.getElementById('page-title').innerText = 'แก้ไขข้อมูลนิสิต';
+        }
+
+        async function deleteStudent(id) {
+            const confirm = await showConfirmModal('ยืนยันการลบ', 'คุณต้องการลบข้อมูลนิสิตรายนี้ใช่หรือไม่? ข้อมูลไม่สามารถกู้คืนได้');
+            if (confirm) {
+                students = students.filter(s => s.id !== id);
+                saveStudents();
+                renderStudentTable();
+                showToast('ลบข้อมูลสำเร็จ');
+            }
+        }
+
+        function viewStudentDetail(id) {
+            // For advisor view only, re-use edit form but make it readonly
+            editStudent(id);
+            document.getElementById('page-title').innerText = 'รายละเอียดข้อมูลนิสิต';
+            
+            const form = document.getElementById('student-form');
+            const inputs = form.querySelectorAll('input, select, textarea, button[type="submit"]');
+            inputs.forEach(input => {
+                if (input.type === 'submit') input.style.display = 'none';
+                else input.disabled = true;
+            });
+            
+            // Override cancel button text
+            const cancelBtn = form.querySelector('button[type="button"]');
+            cancelBtn.innerText = 'กลับ';
+            cancelBtn.onclick = () => {
+                // Restore form state
+                inputs.forEach(input => {
+                    if (input.type === 'submit') input.style.display = 'block';
+                    else input.disabled = false;
+                });
+                cancelBtn.innerText = 'ยกเลิก';
+                document.getElementById('form-id').value = '';
+                document.getElementById('student-form').reset();
+                showPage('view-students');
+            };
+        }
+
+        // --- 7. ADVISOR MANAGEMENT ---
+        function populateAdvisorDropdowns() {
+            const options = advisors.map(a => `<option value="${a.name}">${a.name}</option>`).join('');
+            const selects = document.querySelectorAll('.advisor-select-list');
+            
+            selects.forEach(select => {
+                const isRequired = select.hasAttribute('required');
+                const defaultOption = isRequired ? '<option value="">-- เลือก --</option>' : '<option value="">-- ไม่ระบุ --</option>';
+                const currentValue = select.value;
+                select.innerHTML = defaultOption + options;
+                if (currentValue) select.value = currentValue; // try to retain selected
+            });
+        }
+
+        function renderAdvisors() {
+            const tbody = document.getElementById('advisors-table-body');
+            tbody.innerHTML = '';
+            
+            advisors.forEach(a => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${a.name}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <button onclick="editAdvisor('${a.id}')" class="text-blue-600 hover:text-blue-900 mr-3">แก้ไข</button>
+                        <button onclick="deleteAdvisor('${a.id}')" class="text-red-600 hover:text-red-900">ลบ</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function addAdvisor() {
+            const input = document.getElementById('new-advisor-name');
+            const name = input.value.trim();
+            if (!name) return showToast('กรุณาระบุชื่ออาจารย์', 'error');
+
+            advisors.push({ id: generateId(), name });
+            saveAdvisors();
+            input.value = '';
+            renderAdvisors();
+            populateAdvisorDropdowns();
+            showToast('เพิ่มอาจารย์สำเร็จ');
+        }
+
+        async function editAdvisor(id) {
+            const adv = advisors.find(a => a.id === id);
+            if (!adv) return;
+            
+            const newName = await showPromptModal('แก้ไขชื่ออาจารย์:', adv.name);
+            
+            if (newName && newName.trim() !== '') {
+                
+                // Update in students data too
+                students.forEach(s => {
+                    if (s.advisor_main === adv.name) s.advisor_main = newName.trim();
+                    if (s.advisor_co1 === adv.name) s.advisor_co1 = newName.trim();
+                    if (s.advisor_co2 === adv.name) s.advisor_co2 = newName.trim();
+                    if (s.advisor_co3 === adv.name) s.advisor_co3 = newName.trim();
+                });
+
+                adv.name = newName.trim();
+                saveAdvisors();
+                saveStudents();
+                renderAdvisors();
+                populateAdvisorDropdowns();
+                showToast('แก้ไขข้อมูลอาจารย์สำเร็จ');
+            }
+        }
+
+        async function deleteAdvisor(id) {
+            const confirm = await showConfirmModal('ยืนยันการลบ', 'คุณต้องการลบชื่ออาจารย์ท่านนี้ใช่หรือไม่?');
+            if (confirm) {
+                advisors = advisors.filter(a => a.id !== id);
+                saveAdvisors();
+                renderAdvisors();
+                populateAdvisorDropdowns();
+                showToast('ลบข้อมูลอาจารย์สำเร็จ');
+            }
+        }
+
+        // --- 8. EXPORT & BACKUP ---
+        const csvHeaders = ['ลำดับ', 'ระดับการศึกษา', 'ปฏิทินการศึกษา', 'ปีที่เข้าศึกษา', 'เข้าร่วม Double Masters Degree', 'เข้าร่วมโครงการเรียนล่วงหน้าหรือตรี+1', 'ทุน', 'ระยะเวลาที่ได้รับทุน', 'เลขประจำตัวนิสิต', 'คำนำหน้า', 'ชื่อ', 'นามสกุล', 'เพศ', 'สถานะในการยื่นเอกสาร', 'สถานภาพการศึกษา', 'สถานที่ทำงาน', 'เรียนต่อ', 'อื่นๆ', 'แผนการเรียน', 'เบอร์โทรศัพท์', 'อีเมล', 'ชื่อสถาบันที่จบระดับปริญญาตรี', 'สาขาที่จบระดับปริญญาตรี', 'ปีที่จบการศึกษาปริญญาตรี', 'เกรดเฉลี่ยปริญญาตรี', 'สถาบันที่จบระดับปริญญาโท', 'สาขาที่จบระดับปริญญาโท', 'ปีที่จบการศึกษาปริญญาโท', 'ปีที่จบการศึกษาปริญญาเอก', 'เงื่อนไขการเข้าศึกษาบัณฑิตวิทยาลัย', 'หมายเหตุ', 'อาจารย์ที่ปรึกษา(Advisor)', 'อาจารย์ที่ปรึกษาร่วม1', 'อาจารย์ที่ปรึกษาร่วม2', 'อาจารย์ที่ปรึกษาร่วม3', 'หัวข้อวิทยานิพนธ์หลัก', 'ผลงานวิจัยระหว่างเรียน', 'ผลงานวิจัยที่ใช้จบ'];
+        
+        function downloadCSV(csvContent, filename) {
+            // Add BOM for Excel Thai language support
+            const bom = "\uFEFF";
+            const blob = new Blob([bom + csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            link.setAttribute("href", url);
+            link.setAttribute("download", filename);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        function downloadCSVTemplate() {
+            const csvContent = csvHeaders.join(",") + "\n";
+            downloadCSV(csvContent, "student_template.csv");
+            showToast('ดาวน์โหลด Template สำเร็จ');
+        }
+
+        function exportCSV() {
+            let csvContent = csvHeaders.join(",") + "\n";
+            
+            students.forEach(s => {
+                const row = formFields.map(field => {
+                    let cell = s[field] || '';
+                    // Escape double quotes and wrap in quotes if contains comma
+                    cell = cell.replace(/"/g, '""');
+                    if (cell.search(/("|,|\n)/g) >= 0) cell = `"${cell}"`;
+                    return cell;
+                });
+                csvContent += row.join(",") + "\n";
+            });
+
+            downloadCSV(csvContent, "students_export.csv");
+            showToast('ส่งออกข้อมูล CSV สำเร็จ');
+        }
+
+        function exportJSON() {
+            const data = {
+                advisors: advisors,
+                students: students
+            };
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(data, null, 2));
+            const link = document.createElement("a");
+            link.setAttribute("href", dataStr);
+            link.setAttribute("download", "database_backup.json");
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            showToast('แบ็คอัพข้อมูล JSON สำเร็จ');
+        }
+
+        // --- INIT APP ---
+        document.addEventListener('DOMContentLoaded', () => {
+            initData();
+        });
+
+    </script>
+</body>
+</html>
